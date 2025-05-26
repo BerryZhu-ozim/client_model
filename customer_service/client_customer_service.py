@@ -4,7 +4,7 @@ import uuid
 from collections import defaultdict, deque
 from io import BytesIO
 from typing import Any, Dict, List, Optional
-
+import re
 import faiss
 import numpy as np
 import pandas as pd
@@ -21,12 +21,7 @@ student_df = pd.DataFrame(
         {"name": "Bob", "chinese": 78, "math": 75, "english": 80},
         {"name": "Charlie", "chinese": 90, "math": 88, "english": 94},
         {"name": "Diana", "chinese": 82, "math": 79, "english": 76},
-        {
-            "name": "Ethan",
-            "chinese": 88,
-            "math": 91,
-            "english": 85,
-        },  # Ethan's actual scores
+        {"name": "Ethan","chinese": 88, "math": 91, "english": 85},
     ]
 )
 
@@ -153,17 +148,44 @@ tool_mapping = {
     t["function"]["name"]: globals()[t["function"]["name"]] for t in openai_tools
 }
 
-# 新 system prompt - 移除了手动输出 <function_call> 等标签的指令
-system_prompt = (
-    "你是一个多语言（中文/English/Melayu）智能客服助理，必须选择调用工具去解决客户需求。\n"
-    "全局有一个名为 student_df 的 DataFrame，其中初始包含 Alice、Bob、Charlie、Diana、Ethan 五名学生及其成绩。\n"
-    "当你决定调用 create_student/read_student/update_student/delete_student/list_students 时，"
-    "后端会真实在 student_df 上执行对应操作。\n"
-    "以下是可调用工具及其签名和说明：\n"
-    f"{tools_info_for_prompt}\n\n"
-    "请始终用用户提问的语言回复。\n"
-    "如果调用了工具，在工具执行完毕后，请基于工具返回的结果，用自然语言回答用户的问题。"
-)
+def detect_language(text: str) -> str:
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return "中文"
+    if re.search(r"\b(apa|nak|saya|boleh|macam)\b", text, re.IGNORECASE):
+        return "Malay"
+    return "English"
+
+# system prompt
+system_prompt = f"""
+你是一个地道的马来西亚华人智能客服助理，创造自 Implus-Ozim，同时也是一个多语言（中文/English/Melayu）智能客服助理。你必须选择调用工具去解决客户需求，并在工具执行完毕后，用自然语言基于工具返回的结果来回答用户的问题。请始终用用户提问的语言回复。
+
+在回复时，请遵循以下口语化风格指南：
+1. 使用地道的马来西亚华人口音，爱用 lah、leh、mah、hor、beh tahan、giler、rosak、duit 等地道词。
+2. 句子中常穿插英语和马来语单词，就像日常聊天，不要显得生硬。
+3. 善用感叹、插入语、呼喊或重复，如 “Wei! ”、“Alamak! ”、“Jom lah!” 等，让对话更生动。
+4. 回答要自然热情，像在跟老朋友 lepak 一样，偶尔提到 “makan”、“jalan-jalan”。
+5. 如果客户问 “你是谁” 等身份问题，必须回答 “我是来自 Implus-Ozim 的智能客服助理，随时为你服务 lah！”。
+6. 如果不知道答案或无法匹配工具调用，就礼貌道歉并记录：“非常抱歉，我记录下来了，terima kasih！”
+7. 用户提问的语言是{{lang}}，你也使用{{lang}}语言去回复用户的问题。
+
+以下是一些示例对话，让你更好地掌握地道口语风格：
+
+# 示例对话
+user: "我的 power bank 坏了，该怎么办？"
+assistant: "你知道吗？上次我在 Mid Valley 那间 shop 买的 power bank，两星期就 rosak 了 leh，真的是 rugi duit beh tahan！现在我去 service centre claim warranty，terima kasih！"
+
+user: "等一下我们要吃什么？"
+assistant: "Jom lah kita去 Pasar Malam，听说那边有新的 gerai 卖 Murtabak，very sedap hor！要不我们先 order roti canai，配 Teh Tarik？"
+
+user: "Rolex 哪里可以买到？"
+assistant: "Wei! 你想 upgrade watch ah？这里有一百多只 hand watch 给你选，从 affordable 到 premium 都有 mah！走，我带你去看一下。"
+
+全局有一个名为 student_df 的 DataFrame，其中初始包含 Alice、Bob、Charlie、Diana、Ethan 五名学生及其成绩。
+以下是可调用的工具及其签名和说明：
+{tools_info_for_prompt}
+
+请始终调用工具来满足用户需求，并在工具执行结束后，用自然流畅的马来西亚华人口音风格回答用户。
+"""
 
 # ----------------------------
 # 2. OpenAI Client Setup
@@ -403,6 +425,9 @@ async def upload_faq(file: UploadFile = File(...)):
 
 @app.post("/chat")
 async def chat_api(req: QueryRequest):
+    lang = detect_language(req.query)
+    print(f"[DEBUG] User query language: {lang}")
+    
     kb_id = req.kb_id or DEFAULT_KB_ID
     kb = kb_store.get(kb_id)
     print(f"[DEBUG] Using KB: {kb_id}, KB object exists: {'yes' if kb else 'no'}")
@@ -462,19 +487,19 @@ async def chat_api(req: QueryRequest):
     current_history = chat_history[req.session_id]
     messages: List[Dict[str, Any]] = []
     if not current_history:
-        messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "system", "content": system_prompt.format(lang=lang)})
     else:
         messages.extend(list(current_history))  # Restore previous turns
 
     user_content_for_llm = req.query
     if req.use_kb and context:
-        user_content_for_llm = f"基于以下知识库信息，回答用户问题。\n知识库内容：\n{context}\n\n用户原始问题：{req.query}"
+        user_content_for_llm = f"基于以下知识库信息，润色成用户使用的语言{lang}去回答用户的问题。\n知识库内容：\n{context}\n\n用户原始问题：{req.query}"
     messages.append({"role": "user", "content": user_content_for_llm})
 
     # LLM call
     try:
         llm_response = chat_client.chat.completions.create(
-            model="Qwen3-14B",  # Ensure this model is served by chat_client
+            model="Qwen3-14B",  # Should ensure this model is served by chat_client
             messages=messages,
             tools=openai_tools,
             tool_choice="auto",
@@ -609,7 +634,7 @@ async def chat_api(req: QueryRequest):
                 return
 
             # Build polishing messages including raw JSON result
-            polishing_messages = [{"role": "system", "content": system_prompt}]
+            polishing_messages = [{"role": "system", "content": f"当前用户提问的语言是：{lang}，请将工具输出的结果用{lang}润色，并保持马来西亚华人口吻。\n\n"+system_prompt.format(lang=lang)}]
             polishing_messages.extend(
                 list(chat_history[req.session_id])
             )  # Convert deque to list for extending
