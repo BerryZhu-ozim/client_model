@@ -1,0 +1,75 @@
+[2025-05-21 06:57:14] server_args=ServerArgs(model_path='/home/berry/client_model/model_local/models--Qwen--Qwen2.5-3B-Instruct/snapshots/aa8e72537993ba99e69dfaafa59ed015b17504d1/', tokenizer_path='/home/berry/client_model/model_local/models--Qwen--Qwen2.5-3B-Instruct/snapshots/aa8e72537993ba99e69dfaafa59ed015b17504d1/', tokenizer_mode='auto', skip_tokenizer_init=False, enable_tokenizer_batch_encode=False, load_format='auto', trust_remote_code=False, dtype='auto', kv_cache_dtype='auto', quantization=None, quantization_param_path=None, context_length=8192, device='cuda', served_model_name='/home/berry/client_model/model_local/models--Qwen--Qwen2.5-3B-Instruct/snapshots/aa8e72537993ba99e69dfaafa59ed015b17504d1/', chat_template=None, completion_template=None, is_embedding=False, revision=None, host='0.0.0.0', port=30000, mem_fraction_static=0.4, max_running_requests=None, max_total_tokens=10240, chunked_prefill_size=8192, max_prefill_tokens=16384, schedule_policy='fcfs', schedule_conservativeness=1.0, cpu_offload_gb=0, page_size=1, tp_size=1, pp_size=1, max_micro_batch_size=None, stream_interval=1, stream_output=False, random_seed=332759453, constrained_json_whitespace_pattern=None, watchdog_timeout=300, dist_timeout=None, download_dir=None, base_gpu_id=0, gpu_id_step=1, log_level='info', log_level_http=None, log_requests=False, log_requests_level=0, show_time_cost=False, enable_metrics=False, decode_log_interval=40, enable_request_time_stats_logging=False, api_key=None, file_storage_path='sglang_storage', enable_cache_report=False, reasoning_parser=None, dp_size=1, load_balance_method='round_robin', ep_size=1, dist_init_addr=None, nnodes=1, node_rank=0, json_model_override_args='{}', lora_paths=None, max_loras_per_batch=8, lora_backend='triton', attention_backend=None, sampling_backend='flashinfer', grammar_backend='xgrammar', speculative_algorithm=None, speculative_draft_model_path=None, speculative_num_steps=None, speculative_eagle_topk=None, speculative_num_draft_tokens=None, speculative_accept_threshold_single=1.0, speculative_accept_threshold_acc=1.0, speculative_token_map=None, enable_double_sparsity=False, ds_channel_config_path=None, ds_heavy_channel_num=32, ds_heavy_token_num=256, ds_heavy_channel_type='qk', ds_sparse_decode_threshold=4096, disable_radix_cache=False, disable_cuda_graph=False, disable_cuda_graph_padding=False, enable_nccl_nvls=False, disable_outlines_disk_cache=False, disable_custom_all_reduce=False, enable_multimodal=None, disable_overlap_schedule=False, enable_mixed_chunk=False, enable_dp_attention=False, enable_dp_lm_head=False, enable_ep_moe=False, enable_deepep_moe=False, deepep_mode='auto', enable_torch_compile=False, torch_compile_max_bs=32, cuda_graph_max_bs=None, cuda_graph_bs=None, torchao_config='', enable_nan_detection=False, enable_p2p_check=False, triton_attention_reduce_in_fp32=False, triton_attention_num_kv_splits=8, num_continuous_decode_steps=1, delete_ckpt_after_loading=False, enable_memory_saver=False, allow_auto_truncate=False, enable_custom_logit_processor=False, tool_call_parser=None, enable_hierarchical_cache=False, hicache_ratio=2.0, hicache_size=0, hicache_write_policy='write_through_selective', flashinfer_mla_disable_ragged=False, warmups=None, moe_dense_tp_size=None, n_share_experts_fusion=0, disable_chunked_prefix_cache=False, disable_fast_image_processor=False, mm_attention_backend=None, debug_tensor_dump_output_folder=None, debug_tensor_dump_input_file=None, debug_tensor_dump_inject=False, disaggregation_mode='null', disaggregation_bootstrap_port=8998, disaggregation_transfer_backend='mooncake', disaggregation_ib_device=None, pdlb_url=None)
+[2025-05-21 06:57:21] Attention backend not set. Use flashinfer backend by default.
+[2025-05-21 06:57:21] Init torch distributed begin.
+[2025-05-21 06:57:21] Init torch distributed ends. mem usage=0.00 GB
+[2025-05-21 06:57:21] Load weight begin. avail mem=24.51 GB
+[2025-05-21 06:57:22] Ignore import error when loading sglang.srt.models.llama4. 
+Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  50% Completed | 1/2 [00:01<00:01,  1.15s/it]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:01<00:00,  1.11it/s]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:01<00:00,  1.06it/s]
+
+[2025-05-21 06:57:24] Load weight end. type=Qwen2ForCausalLM, dtype=torch.bfloat16, avail mem=18.55 GB, mem usage=5.96 GB.
+[2025-05-21 06:57:24] KV Cache is allocated. #tokens: 10240, K size: 0.18 GB, V size: 0.18 GB
+[2025-05-21 06:57:24] Memory pool end. avail mem=17.94 GB
+2025-05-21 06:57:25,169 - INFO - flashinfer.jit: Prebuilt kernels not found, using JIT backend
+[2025-05-21 06:57:25] Capture cuda graph begin. This can take up to several minutes. avail mem=17.32 GB
+[2025-05-21 06:57:25] Capture cuda graph bs [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160]
+  0%|          | 0/23 [00:00<?, ?it/s]Capturing batches (avail_mem=17.32 GB):   0%|          | 0/23 [00:00<?, ?it/s]2025-05-21 06:57:27,098 - INFO - flashinfer.jit: Loading JIT ops: batch_prefill_with_kv_cache_dtype_q_bf16_dtype_kv_bf16_dtype_o_bf16_dtype_idx_i32_head_dim_qk_128_head_dim_vo_128_posenc_0_use_swa_False_use_logits_cap_False_f16qk_False
+2025-05-21 06:57:27,185 - INFO - flashinfer.jit: Finished loading JIT ops: batch_prefill_with_kv_cache_dtype_q_bf16_dtype_kv_bf16_dtype_o_bf16_dtype_idx_i32_head_dim_qk_128_head_dim_vo_128_posenc_0_use_swa_False_use_logits_cap_False_f16qk_False
+Capturing batches (avail_mem=17.32 GB):   4%|▍         | 1/23 [00:03<01:11,  3.26s/it]Capturing batches (avail_mem=17.10 GB):   4%|▍         | 1/23 [00:03<01:11,  3.26s/it]Capturing batches (avail_mem=17.10 GB):   9%|▊         | 2/23 [00:03<00:31,  1.51s/it]Capturing batches (avail_mem=16.96 GB):   9%|▊         | 2/23 [00:03<00:31,  1.51s/it]Capturing batches (avail_mem=16.96 GB):  13%|█▎        | 3/23 [00:03<00:18,  1.06it/s]Capturing batches (avail_mem=16.84 GB):  13%|█▎        | 3/23 [00:03<00:18,  1.06it/s]Capturing batches (avail_mem=16.84 GB):  17%|█▋        | 4/23 [00:04<00:12,  1.46it/s]Capturing batches (avail_mem=16.71 GB):  17%|█▋        | 4/23 [00:04<00:12,  1.46it/s]Capturing batches (avail_mem=16.71 GB):  22%|██▏       | 5/23 [00:04<00:11,  1.58it/s]Capturing batches (avail_mem=16.61 GB):  22%|██▏       | 5/23 [00:04<00:11,  1.58it/s]Capturing batches (avail_mem=16.61 GB):  26%|██▌       | 6/23 [00:04<00:08,  1.94it/s]Capturing batches (avail_mem=16.49 GB):  26%|██▌       | 6/23 [00:04<00:08,  1.94it/s]Capturing batches (avail_mem=16.49 GB):  30%|███       | 7/23 [00:05<00:07,  2.28it/s]Capturing batches (avail_mem=16.39 GB):  30%|███       | 7/23 [00:05<00:07,  2.28it/s]Capturing batches (avail_mem=16.39 GB):  35%|███▍      | 8/23 [00:05<00:05,  2.60it/s]Capturing batches (avail_mem=16.28 GB):  35%|███▍      | 8/23 [00:05<00:05,  2.60it/s]Capturing batches (avail_mem=16.28 GB):  39%|███▉      | 9/23 [00:06<00:06,  2.28it/s]Capturing batches (avail_mem=16.19 GB):  39%|███▉      | 9/23 [00:06<00:06,  2.28it/s]Capturing batches (avail_mem=16.19 GB):  43%|████▎     | 10/23 [00:06<00:05,  2.57it/s]Capturing batches (avail_mem=16.09 GB):  43%|████▎     | 10/23 [00:06<00:05,  2.57it/s]Capturing batches (avail_mem=16.09 GB):  48%|████▊     | 11/23 [00:06<00:04,  2.82it/s]Capturing batches (avail_mem=16.01 GB):  48%|████▊     | 11/23 [00:06<00:04,  2.82it/s]Capturing batches (avail_mem=16.01 GB):  52%|█████▏    | 12/23 [00:06<00:03,  3.02it/s]Capturing batches (avail_mem=15.92 GB):  52%|█████▏    | 12/23 [00:06<00:03,  3.02it/s]Capturing batches (avail_mem=15.92 GB):  57%|█████▋    | 13/23 [00:07<00:04,  2.50it/s]Capturing batches (avail_mem=15.89 GB):  57%|█████▋    | 13/23 [00:07<00:04,  2.50it/s]Capturing batches (avail_mem=15.89 GB):  61%|██████    | 14/23 [00:07<00:03,  2.75it/s]Capturing batches (avail_mem=15.80 GB):  61%|██████    | 14/23 [00:07<00:03,  2.75it/s]Capturing batches (avail_mem=15.80 GB):  65%|██████▌   | 15/23 [00:07<00:02,  2.96it/s]Capturing batches (avail_mem=15.74 GB):  65%|██████▌   | 15/23 [00:07<00:02,  2.96it/s]Capturing batches (avail_mem=15.74 GB):  70%|██████▉   | 16/23 [00:08<00:02,  3.13it/s]Capturing batches (avail_mem=15.67 GB):  70%|██████▉   | 16/23 [00:08<00:02,  3.13it/s]Capturing batches (avail_mem=15.67 GB):  74%|███████▍  | 17/23 [00:08<00:02,  2.56it/s]Capturing batches (avail_mem=15.63 GB):  74%|███████▍  | 17/23 [00:08<00:02,  2.56it/s]Capturing batches (avail_mem=15.63 GB):  78%|███████▊  | 18/23 [00:09<00:01,  2.80it/s]Capturing batches (avail_mem=15.57 GB):  78%|███████▊  | 18/23 [00:09<00:01,  2.80it/s]Capturing batches (avail_mem=15.57 GB):  83%|████████▎ | 19/23 [00:09<00:01,  3.00it/s]Capturing batches (avail_mem=15.51 GB):  83%|████████▎ | 19/23 [00:09<00:01,  3.00it/s]Capturing batches (avail_mem=15.51 GB):  87%|████████▋ | 20/23 [00:09<00:00,  3.07it/s]Capturing batches (avail_mem=15.46 GB):  87%|████████▋ | 20/23 [00:09<00:00,  3.07it/s]Capturing batches (avail_mem=15.46 GB):  91%|█████████▏| 21/23 [00:10<00:00,  2.66it/s]Capturing batches (avail_mem=15.42 GB):  91%|█████████▏| 21/23 [00:10<00:00,  2.66it/s]Capturing batches (avail_mem=15.42 GB):  96%|█████████▌| 22/23 [00:10<00:00,  2.85it/s]Capturing batches (avail_mem=15.37 GB):  96%|█████████▌| 22/23 [00:10<00:00,  2.85it/s]Capturing batches (avail_mem=15.37 GB): 100%|██████████| 23/23 [00:10<00:00,  2.94it/s]Capturing batches (avail_mem=15.37 GB): 100%|██████████| 23/23 [00:10<00:00,  2.13it/s]
+[2025-05-21 06:57:36] Capture cuda graph end. Time elapsed: 10.84 s. mem usage=1.98 GB. avail mem=15.34 GB.
+[2025-05-21 06:57:36] max_total_num_tokens=10240, chunked_prefill_size=8192, max_prefill_tokens=16384, max_running_requests=4097, context_len=8192
+[2025-05-21 06:57:37] INFO:     Started server process [330900]
+[2025-05-21 06:57:37] INFO:     Waiting for application startup.
+[2025-05-21 06:57:37] INFO:     Application startup complete.
+[2025-05-21 06:57:37] INFO:     Uvicorn running on http://0.0.0.0:30000 (Press CTRL+C to quit)
+[2025-05-21 06:57:38] INFO:     127.0.0.1:57212 - "GET /get_model_info HTTP/1.1" 200 OK
+[2025-05-21 06:57:38] Prefill batch. #new-seq: 1, #new-token: 6, #cached-token: 0, token usage: 0.00, #running-req: 0, #queue-req: 0
+[2025-05-21 06:57:39] INFO:     127.0.0.1:57214 - "POST /generate HTTP/1.1" 200 OK
+[2025-05-21 06:57:39] The server is fired up and ready to roll!
+Process Process-2:
+Process Process-1:
+Traceback (most recent call last):
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/sglang/srt/managers/scheduler.py", line 2269, in run_scheduler_process
+    scheduler.event_loop_overlap()
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/sglang/srt/managers/scheduler.py", line 688, in event_loop_overlap
+    self.check_memory()
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/sglang/srt/managers/scheduler.py", line 1220, in check_memory
+    self.token_to_kv_pool_allocator.available_size()
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/sglang/srt/mem_cache/memory_pool.py", line 159, in available_size
+    return len(self.free_slots)
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/torch/_tensor.py", line 1142, in __len__
+    return self.shape[0]
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/sglang/srt/managers/detokenizer_manager.py", line 275, in run_detokenizer_process
+    manager.event_loop()
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/sglang/srt/managers/detokenizer_manager.py", line 109, in event_loop
+    recv_obj = self.recv_from_scheduler.recv_pyobj()
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/site-packages/zmq/sugar/socket.py", line 989, in recv_pyobj
+    msg = self.recv(flags)
+  File "_zmq.py", line 1147, in zmq.backend.cython._zmq.Socket.recv
+  File "_zmq.py", line 1182, in zmq.backend.cython._zmq.Socket.recv
+  File "_zmq.py", line 1337, in zmq.backend.cython._zmq._recv_copy
+  File "_zmq.py", line 169, in zmq.backend.cython._zmq._check_rc
+KeyboardInterrupt
+[2025-05-21 06:57:57] INFO:     Shutting down
+[2025-05-21 06:57:57] INFO:     Waiting for application shutdown.
+[2025-05-21 06:57:57] INFO:     Application shutdown complete.
+[2025-05-21 06:57:57] INFO:     Finished server process [330900]
+Error in atexit._run_exitfuncs:
+Traceback (most recent call last):
+  File "/home/berry/miniconda3/envs/model_deploy/lib/python3.9/multiprocessing/popen_fork.py", line 27, in poll
+    pid, sts = os.waitpid(self.pid, flag)
+KeyboardInterrupt
