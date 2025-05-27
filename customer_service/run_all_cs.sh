@@ -23,6 +23,6 @@ echo "CUDA 环境变量已设置"
 # echo "jina-embeddings-v3模型已启动"
 
 # 3、启动FastAPI服务
-nohup uvicorn client_customer_service:app --host 0.0.0.0 --port 8003 > logs_file/fastapi_cs.log 2>&1 &
+nohup uvicorn client_customer_service_stream:app --host 0.0.0.0 --port 8004 > logs_file/fastapi_cs_stream.log 2>&1 &
 
 echo "FastAPI服务已启动"

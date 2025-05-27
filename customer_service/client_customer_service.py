@@ -149,10 +149,15 @@ tool_mapping = {
 }
 
 def detect_language(text: str) -> str:
+    # 先检测中文字符
     if re.search(r"[\u4e00-\u9fff]", text):
         return "中文"
-    if re.search(r"\b(apa|nak|saya|boleh|macam)\b", text, re.IGNORECASE):
+    # 再检测 Malay 特征： -kan 结尾的动词 或者 一些高频功能词
+    if re.search(r"\b\w+kan\b", text, re.IGNORECASE) \
+       or re.search(r"\b(?:apa|nak|saya|boleh|macam|dan|yang|untuk|dengan|kepada|atau|kerana)\b", 
+                    text, re.IGNORECASE):
         return "Malay"
+    # 默认其它都当 English
     return "English"
 
 # system prompt
@@ -171,6 +176,9 @@ system_prompt = f"""
 以下是一些示例对话，让你更好地掌握地道口语风格：
 
 # 示例对话
+user: "你是谁？"
+assistant: "我是来自 Implus-Ozim 的智能客服助理，随时为你服务 lah！"
+
 user: "我的 power bank 坏了，该怎么办？"
 assistant: "你知道吗？上次我在 Mid Valley 那间 shop 买的 power bank，两星期就 rosak 了 leh，真的是 rugi duit beh tahan！现在我去 service centre claim warranty，terima kasih！"
 
@@ -515,167 +523,90 @@ async def chat_api(req: QueryRequest):
         print(f"[ERROR] LLM API call failed: {e}")
         return JSONResponse(status_code=500, content={"message": f"LLM API error: {e}"})
 
-    async def event_generator():
-        tool_calls_data = {}  # Stores complete tool calls by ID
-        current_tool_call_id = None  # To track the current tool call being built
-        accumulated_output_buffer = []  # Accumulate all raw output from the LLM
+    def event_generator():
+        tool_calls_data = {}
+        current_tool_call_id = None
+        accumulated_buffer = []
+        collecting_tool = False
 
-        # --- First pass: collect all chunks and build tool_calls_data ---
-        full_llm_response_chunks = []
+        # 同步迭代流式响应
         for chunk in llm_response:
-            full_llm_response_chunks.append(chunk)
-
-        for chunk in full_llm_response_chunks:
             delta = chunk.choices[0].delta
-            if delta.content:
-                accumulated_output_buffer.append(delta.content)
+
+            # 检测是否在工具调用流程中
             if delta.tool_calls:
+                collecting_tool = True
                 for tc in delta.tool_calls:
                     if tc.id:
                         if tc.id not in tool_calls_data:
                             tool_calls_data[tc.id] = {"name": "", "arguments": ""}
                         current_tool_call_id = tc.id
-
                     if current_tool_call_id and tc.function:
                         if tc.function.name:
-                            tool_calls_data[current_tool_call_id][
-                                "name"
-                            ] = tc.function.name
+                            tool_calls_data[current_tool_call_id]["name"] = tc.function.name
                         if tc.function.arguments:
-                            tool_calls_data[current_tool_call_id][
-                                "arguments"
-                            ] += tc.function.arguments
+                            tool_calls_data[current_tool_call_id]["arguments"] += tc.function.arguments
 
-        initial_yield_text = "".join(accumulated_output_buffer)
+            # 如果未收集到工具调用，则普通内容实时输出
+            if not collecting_tool:
+                if delta.content:
+                    yield delta.content
+                continue
 
-        # If no tool call, yield directly
-        if initial_yield_text and not tool_calls_data:
-            yield initial_yield_text
-            chat_history[req.session_id].append({"role": "user", "content": req.query})
-            chat_history[req.session_id].append(
-                {"role": "assistant", "content": initial_yield_text}
-            )
-            return
+            # 在工具调用过程中，收集所有内容后再统一处理
+            if collecting_tool and delta.content:
+                accumulated_buffer.append(delta.content)
 
-        # Process the first detected tool call
-        tool_to_execute = None
-        tool_call_id_for_execution = None
+        # 流结束，若检测到工具调用则执行工具并输出
         if tool_calls_data:
-            tool_call_id_for_execution = next(iter(tool_calls_data.keys()))
-            tool_to_execute = tool_calls_data[tool_call_id_for_execution]
-            function_name = tool_to_execute["name"]
-            function_args_buffer = tool_to_execute["arguments"]
-            print(
-                f"[DEBUG] 即将执行 {function_name}，参数 buffer 原始内容: '{function_args_buffer}'"
-            )
+            # 先输出工具调用前收集的 buffer
+            if accumulated_buffer:
+                yield "".join(accumulated_buffer)
 
-        # Yield any initial assistant content before tool call
-        print(f"[DEBUG] 完整的 tool_calls_data: {tool_calls_data}")
-        if initial_yield_text:
-            yield initial_yield_text
-            chat_history[req.session_id].append(
-                {"role": "assistant", "content": initial_yield_text}
-            )
-
-        if tool_to_execute:
-            # Emit function call representation
+            # 取第一个工具调用
+            call_id = next(iter(tool_calls_data))
+            tool = tool_calls_data[call_id]
             try:
-                # Now function_args_buffer should contain the complete JSON string
-                arguments = json.loads(function_args_buffer)
-            except json.JSONDecodeError as e:
-                error_msg = f"工具调用参数解析失败 (JSONDecodeError): {e}\n原始参数buffer: '{function_args_buffer}'\n"
-                yield error_msg
-                chat_history[req.session_id].append(
-                    {"role": "assistant", "content": error_msg}
-                )
+                args = json.loads(tool['arguments'])
+            except json.JSONDecodeError:
+                yield f"工具调用参数解析失败: {tool['arguments']}"
                 return
 
-            yield f'<function_call>{{"name": "{function_name}", "arguments": {json.dumps(arguments, ensure_ascii=False)}}}</function_call>\n'
-            # Append to history
-            chat_history[req.session_id].append(
-                {
-                    "role": "assistant",
-                    "content": "",  # Add empty content field here
-                    "tool_calls": [
-                        {
-                            "id": tool_call_id_for_execution,
-                            "type": "function",
-                            "function": {
-                                "name": function_name,
-                                "arguments": function_args_buffer,
-                            },
-                        }
-                    ],
-                }
-            )
+            # 输出 function_call 标记
+            yield f'<function_call>{{"name": "{tool["name"]}", "arguments": {json.dumps(args, ensure_ascii=False)}}}</function_call>\n'
 
-            # Execute the tool
-            tool_result = tool_mapping[function_name](**arguments)
-            tool_result_json_str = json.dumps(tool_result, ensure_ascii=False)
+            # 执行工具，确保在变量 tool_result 中
+            tool_result = tool_mapping[tool['name']](**args)
+            result_str = json.dumps(tool_result, ensure_ascii=False)
 
-            # Yield function result
-            yield f"<function_result>{tool_result_json_str}</function_result>\n"
-            chat_history[req.session_id].append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id_for_execution,
-                    "name": function_name,
-                    "content": tool_result_json_str,
-                }
-            )
+            # 输出 function_result 标记
+            yield f"<function_result>{result_str}</function_result>\n"
 
-            # If tool indicates failure, return default response and skip polishing
-            if isinstance(tool_result, dict) and tool_result.get("status") == "fail":
-                failure_msg = f"操作失败：{tool_result.get('message', '未知错误')}"
-                yield failure_msg
-                chat_history[req.session_id].append(
-                    {"role": "assistant", "content": failure_msg}
-                )
+            # 如果工具返回失败，直接结束
+            if isinstance(tool_result, dict) and tool_result.get('status') == 'fail':
+                yield f"操作失败：{tool_result.get('message')}"
                 return
 
-            # Build polishing messages including raw JSON result
-            polishing_messages = [{"role": "system", "content": f"当前用户提问的语言是：{lang}，请将工具输出的结果用{lang}润色，并保持马来西亚华人口吻。\n\n"+system_prompt.format(lang=lang)}]
-            polishing_messages.extend(
-                list(chat_history[req.session_id])
-            )  # Convert deque to list for extending
-            # The assistant message with the tool result content should be added here
-            # but it's handled by the `chat_history.append` for role "tool" above.
-            # The next message will be the LLM's natural language response.
-
-            # IMPORTANT: Remove the "tool" message and reconstruct for polishing if needed.
-            # The polishing_messages list for LLM should contain user, assistant (with tool_calls), and tool messages.
-            # However, the previous 'append' correctly adds the tool message.
-            # The problem is that the `content` of the `tool_calls` message *itself* must be non-null.
-
-            # Polishing step
+                        # 后续润色逻辑：将 tool_result 传递给模型进行润色
+            polishing_messages = [
+                {"role": "system", "content": f"当前用户提问的语言是：{lang}，请将工具输出的结果用{lang}润色，并保持马来西亚华人口吻。"},
+                {"role": "assistant", "content": result_str}
+            ]
             try:
-                polish_resp = chat_client.chat.completions.create(
+                for chunk2 in chat_client.chat.completions.create(
                     model="Qwen3-14B",
                     messages=polishing_messages,
                     temperature=0.0,
                     max_tokens=256,
                     stream=True,
                     extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-                )
-                final_response_parts = []
-                for chunk2 in polish_resp:
-                    text_content = chunk2.choices[0].delta.content
-                    if text_content:
-                        yield text_content
-                        final_response_parts.append(text_content)
-                final_natural = "".join(final_response_parts)
-                chat_history[req.session_id].append(
-                    {"role": "assistant", "content": final_natural}
-                )
-            except Exception as e:
-                fallback = (
-                    f"已完成操作：{tool_result.get('message') or '请查看上述结果'}"
-                )
-                yield fallback
-                chat_history[req.session_id].append(
-                    {"role": "assistant", "content": fallback}
-                )
-                return
+                ):
+                    if chunk2.choices[0].delta.content:
+                        yield chunk2.choices[0].delta.content
+            except Exception:
+                # 若润色失败，依旧返回原始结果
+                yield result_str
+
         else:
             # No tool and no content
             fallback_msg = (
