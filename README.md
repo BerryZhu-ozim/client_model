@@ -4,7 +4,7 @@
 
 ## 环境与依赖
 
-所有实验均在 Ubuntu 系统中、使用 Conda 虚拟环境名为 model_deploy 的环境中创建，采用 Python 3.9.21。硬件平台为配备 NVIDIA A100-SXM4-80GB 的服务器，CUDA 驱动版本为 12.2（NVIDIA-SMI 535.230.02）。可通过在终端运行 `nvidia-smi` 确认当前 GPU 及驱动信息。创建环境并安装依赖命令如下：
+所有实验均在 Ubuntu 系统中、使用 Conda 虚拟环境名为 model_deploy 的环境中创建，采用 Python 3.9.21。硬件平台为配备 NVIDIA A100-SXM4-80GB 的服务器，CUDA 驱动版本为 12.2，（NVIDIA-SMI 535.230.02）。需要确保宿主机已安装 NVIDIA 驱动和 NVIDIA Container Toolkit，可通过在终端运行 `nvidia-smi` 确认当前 GPU 及驱动信息。创建环境并安装依赖命令如下：
 
 ```bash
 conda create -n model_deploy python=3.9.21
