@@ -359,8 +359,7 @@ kb_store[DEFAULT_KB_ID] = KB(df0)
 # ----------------------------
 async def detect_sensitive(text: str) -> dict:
     prompt = (
-        "你是敏感信息检测助手，只需判断输入是否包含敏感信息。"
-        '返回 JSON {"sensitive": true/false}。待检测：' + text
+        "你是敏感信息检测助手，只需判断输入是否包含敏感信息。" '返回 JSON {"sensitive": true/false}。待检测：' + text
     )
     try:
         resp = await asyncio.to_thread(
@@ -533,6 +532,7 @@ async def chat_api(req: QueryRequest):
         current_tool_call_id = None
         accumulated_buffer = []
         collecting_tool = False
+        has_output = False
 
         # 同步迭代流式响应
         for chunk in llm_response:
@@ -559,6 +559,7 @@ async def chat_api(req: QueryRequest):
             # 如果未收集到工具调用，则普通内容实时输出
             if not collecting_tool:
                 if delta.content:
+                    has_output = True
                     yield delta.content
                 continue
 
@@ -621,15 +622,15 @@ async def chat_api(req: QueryRequest):
 
         else:
             # No tool and no content
-            fallback_msg = (
-                "抱歉，我暂时无法理解您的请求。请问有什么我可以帮助您的吗？\n"
-            )
-            yield fallback_msg
-            chat_history[req.session_id].append(
-                {"role": "assistant", "content": fallback_msg}
-            )
+            if not has_output:
+                fallback_msg = "抱歉，我暂时无法理解您的请求。请问有什么我可以帮助您的吗？\n"
+                yield fallback_msg
+                chat_history[req.session_id].append(
+                    {"role": "assistant", "content": fallback_msg}
+                )
 
     return StreamingResponse(event_generator(), media_type="text/plain")
+    # return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Run: uvicorn your_file_name:app --host 0.0.0.0 --port 8003 --reload

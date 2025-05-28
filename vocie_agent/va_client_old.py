@@ -260,10 +260,7 @@ async def chat_api(req: QueryRequest):
 
         # 语言检测
 
-        system_with_lang = (
-            f"当前用户使用的语言是：{lang}。"
-            "你需要始终使用和用户相同的语言进行回复，并保持马来西亚华人口吻。"
-        )
+        system_with_lang = f"当前用户使用的语言是：{lang}。" "你需要始终使用和用户相同的语言进行回复，并保持马来西亚华人口吻。"
         messages = [
             {
                 "role": "system",
@@ -295,8 +292,9 @@ async def chat_api(req: QueryRequest):
 
     # 6. 普通多轮对话
     # 如果没有命中 preset，就走这里，把历史和本条用户 query 一起发给模型
-    system_prompt_with_lang = f"当前用户提问的语言是：{lang}，请始终用{lang}回复，并保持马来西亚华人口吻。\n\n" + system_prompt.format(
-        lang=lang
+    system_prompt_with_lang = (
+        f"当前用户提问的语言是：{lang}，请始终用{lang}回复，并保持马来西亚华人口吻。\n\n"
+        + system_prompt.format(lang=lang)
     )
     messages = (
         [
