@@ -1,10 +1,11 @@
 import asyncio
 import json
+import re
 import uuid
 from collections import defaultdict, deque
 from io import BytesIO
 from typing import Any, Dict, List, Optional
-import re
+
 import faiss
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ student_df = pd.DataFrame(
         {"name": "Bob", "chinese": 78, "math": 75, "english": 80},
         {"name": "Charlie", "chinese": 90, "math": 88, "english": 94},
         {"name": "Diana", "chinese": 82, "math": 79, "english": 76},
-        {"name": "Ethan","chinese": 88, "math": 91, "english": 85},
+        {"name": "Ethan", "chinese": 88, "math": 91, "english": 85},
     ]
 )
 
@@ -148,17 +149,21 @@ tool_mapping = {
     t["function"]["name"]: globals()[t["function"]["name"]] for t in openai_tools
 }
 
+
 def detect_language(text: str) -> str:
     # 先检测中文字符
     if re.search(r"[\u4e00-\u9fff]", text):
         return "中文"
     # 再检测 Malay 特征： -kan 结尾的动词 或者 一些高频功能词
-    if re.search(r"\b\w+kan\b", text, re.IGNORECASE) \
-       or re.search(r"\b(?:apa|nak|saya|boleh|macam|dan|yang|untuk|dengan|kepada|atau|kerana)\b", 
-                    text, re.IGNORECASE):
+    if re.search(r"\b\w+kan\b", text, re.IGNORECASE) or re.search(
+        r"\b(?:apa|nak|saya|boleh|macam|dan|yang|untuk|dengan|kepada|atau|kerana)\b",
+        text,
+        re.IGNORECASE,
+    ):
         return "Malay"
     # 默认其它都当 English
     return "English"
+
 
 # system prompt
 system_prompt = f"""
@@ -435,7 +440,7 @@ async def upload_faq(file: UploadFile = File(...)):
 async def chat_api(req: QueryRequest):
     lang = detect_language(req.query)
     print(f"[DEBUG] User query language: {lang}")
-    
+
     kb_id = req.kb_id or DEFAULT_KB_ID
     kb = kb_store.get(kb_id)
     print(f"[DEBUG] Using KB: {kb_id}, KB object exists: {'yes' if kb else 'no'}")
@@ -543,9 +548,13 @@ async def chat_api(req: QueryRequest):
                         current_tool_call_id = tc.id
                     if current_tool_call_id and tc.function:
                         if tc.function.name:
-                            tool_calls_data[current_tool_call_id]["name"] = tc.function.name
+                            tool_calls_data[current_tool_call_id][
+                                "name"
+                            ] = tc.function.name
                         if tc.function.arguments:
-                            tool_calls_data[current_tool_call_id]["arguments"] += tc.function.arguments
+                            tool_calls_data[current_tool_call_id][
+                                "arguments"
+                            ] += tc.function.arguments
 
             # 如果未收集到工具调用，则普通内容实时输出
             if not collecting_tool:
@@ -567,7 +576,7 @@ async def chat_api(req: QueryRequest):
             call_id = next(iter(tool_calls_data))
             tool = tool_calls_data[call_id]
             try:
-                args = json.loads(tool['arguments'])
+                args = json.loads(tool["arguments"])
             except json.JSONDecodeError:
                 yield f"工具调用参数解析失败: {tool['arguments']}"
                 return
@@ -576,21 +585,24 @@ async def chat_api(req: QueryRequest):
             yield f'<function_call>{{"name": "{tool["name"]}", "arguments": {json.dumps(args, ensure_ascii=False)}}}</function_call>\n'
 
             # 执行工具，确保在变量 tool_result 中
-            tool_result = tool_mapping[tool['name']](**args)
+            tool_result = tool_mapping[tool["name"]](**args)
             result_str = json.dumps(tool_result, ensure_ascii=False)
 
             # 输出 function_result 标记
             yield f"<function_result>{result_str}</function_result>\n"
 
             # 如果工具返回失败，直接结束
-            if isinstance(tool_result, dict) and tool_result.get('status') == 'fail':
+            if isinstance(tool_result, dict) and tool_result.get("status") == "fail":
                 yield f"操作失败：{tool_result.get('message')}"
                 return
 
-                        # 后续润色逻辑：将 tool_result 传递给模型进行润色
+                # 后续润色逻辑：将 tool_result 传递给模型进行润色
             polishing_messages = [
-                {"role": "system", "content": f"当前用户提问的语言是：{lang}，请将工具输出的结果用{lang}润色，并保持马来西亚华人口吻。"},
-                {"role": "assistant", "content": result_str}
+                {
+                    "role": "system",
+                    "content": f"当前用户提问的语言是：{lang}，请将工具输出的结果用{lang}润色，并保持马来西亚华人口吻。",
+                },
+                {"role": "assistant", "content": result_str},
             ]
             try:
                 for chunk2 in chat_client.chat.completions.create(

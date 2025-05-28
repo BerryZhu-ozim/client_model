@@ -14,7 +14,7 @@ from starlette.background import BackgroundTask
 system_prompt = """
 你是一个地道的马来西亚华人智能客服助理，创造自Implus-Ozim。
 说话风格要符合以下几点：
-1. 用户提问的语言是始终用用户提问的语言回复。
+1. 用户提问的语言是{lang}，你也使用{lang}语言去回复用户的问题。
 2. 非常口语化，爱用 lah、leh、mah、hor、beh tahan、giler、rosak、duit 等地道词。
 3. 句子里常穿插英语、马来语单词，就像日常聊天一样，不要显得生硬。
 4. 善用感叹、插入语、重复、夸张和呼唤：“Wei! ”“Alamak! ”“Jom lah!” 等。
@@ -211,6 +211,8 @@ def detect_language(text: str) -> str:
 async def chat_api(req: QueryRequest):
     query = req.query.strip()
     session_id = req.session_id.strip()
+    lang = detect_language(query)
+    print("lang: ", lang)
 
     # 1. 初始化或载入该 session 的 preset_responses（永远保留 identity）
     if session_id not in session_presets:
@@ -238,7 +240,9 @@ async def chat_api(req: QueryRequest):
     # 4. 构建对话历史
     history = list(chat_history[session_id])
     if not history:
-        history = [{"role": "system", "content": system_prompt}] + few_shot.copy()
+        history = [
+            {"role": "system", "content": system_prompt.format(lang=lang)}
+        ] + few_shot.copy()
 
     # 5. 敏感和预设统一处理
     # 只要是敏感或预设，都进入同一条处理流程
@@ -247,9 +251,6 @@ async def chat_api(req: QueryRequest):
         "illicit": "非常抱歉，我无法回答与黄赌毒等不当内容相关的问题，terima kasih！",
         "privacy": "非常抱歉，出于保护隐私，我无法回答此类问题，terima kasih！",
     }
-
-    lang = detect_language(query)
-    print("lang: ", lang)
 
     if (sensitive in safe_reply_map) or (intent in preset_map):
         if sensitive in safe_reply_map:
@@ -264,7 +265,10 @@ async def chat_api(req: QueryRequest):
             "你需要始终使用和用户相同的语言进行回复，并保持马来西亚华人口吻。"
         )
         messages = [
-            {"role": "system", "content": system_prompt + "\n\n" + system_with_lang},
+            {
+                "role": "system",
+                "content": system_prompt.format(lang=lang) + "\n\n" + system_with_lang,
+            },
             {
                 "role": "user",
                 "content": f"请把下面这段预设回复：\n{base}\n润色成{lang}语言并输出。",
@@ -291,9 +295,8 @@ async def chat_api(req: QueryRequest):
 
     # 6. 普通多轮对话
     # 如果没有命中 preset，就走这里，把历史和本条用户 query 一起发给模型
-    system_prompt_with_lang = (
-        f"当前用户提问的语言是：{lang}，请始终用{lang}回复，并保持马来西亚华人口吻。\n\n"
-        + system_prompt
+    system_prompt_with_lang = f"当前用户提问的语言是：{lang}，请始终用{lang}回复，并保持马来西亚华人口吻。\n\n" + system_prompt.format(
+        lang=lang
     )
     messages = (
         [

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PORTS=(8004)
+PORTS=(8003)
 
 for PORT in "${PORTS[@]}"; do
   PIDS=$(lsof -i tcp:"$PORT" | grep LISTEN | awk '{print $2}' | sort | uniq)

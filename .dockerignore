@@ -1,0 +1,40 @@
+# 排除所有的 Python 编译文件
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# 排除虚拟环境
+env/
+venv/
+*.env
+
+# 排除 Git 文件夹
+.git
+.gitignore
+
+# 排除 IDE 配置文件
+.idea/
+.vscode/
+
+# 排除日志文件和临时文件
+*.log
+*.tmp
+*.swp
+*.bak
+*.db
+
+# 排除构建文件
+*.egg-info/
+*.eggs/
+dist/
+build/
+
+# 排除容器日志文件
+logs_file/
+
+# --------------------------
+# 本地模型目录（保留文件夹，忽略内部所有内容）
+# --------------------------
+model_local/*
+!model_local/.gitkeep
