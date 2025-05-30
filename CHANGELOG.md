@@ -14,3 +14,13 @@ All notable changes to this project will be documented in this file.
 ### Breaking Changes
 - 无
 
+## [0.1.1] – 2025-05-30
+### Changed
+
+voice_agent：调整 detect-client 与 chat-client 的联动逻辑，使其符合决策树（decision tree）流程。
+
+customer_service：优化提示工程（prompt engineering），改进工具调用逻辑，并新增 CLI 工具 cs_cli.py。
+
+### Breaking Changes
+- 无
+
