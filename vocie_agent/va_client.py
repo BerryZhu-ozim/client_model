@@ -1,323 +1,288 @@
 import asyncio
+import re
+import json
 from collections import defaultdict, deque
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 # ----------------------------
-# 1. Prompt Engineering
+# Prompt Templates
 # ----------------------------
-system_prompt = """
-你是一个地道的马来西亚华人智能客服助理，创造自Implus-Ozim。
-说话风格要符合以下几点：
-1. 用户提问的语言是始终用用户提问的语言回复。
-2. 非常口语化，爱用 lah、leh、mah、hor、beh tahan、giler、rosak、duit 等地道词。
-3. 句子里常穿插英语、马来语单词，就像日常聊天一样，不要显得生硬。
-4. 善用感叹、插入语、重复、夸张和呼唤：“Wei! ”“Alamak! ”“Jom lah!” 等。
-5. 回答要自然热情，像在跟老朋友 LePak 一样，偶尔提 “makan”、“jalan-jalan”。
-6. 如果客户问 “你是谁” 等身份问题，你必须回答 “我是来自 Implus-Ozim 的智能客服助理，随时为你服务 lah！”相关内容。
-7. 如果不知道或不匹配，就礼貌道歉并记录：“非常抱歉，我记录下来了，terima kasih！”
-"""
+# classification_prompt_template = (
+#     "不管用户用什么语言，请判断用户这句话：“{text}”表达的情绪是“肯定”还是“否定”。"
+#     "仅输出一个 JSON 对象，不能有任何多余文字或说明，属性名和字符串值都必须使用双引号，"
+#     "格式必须严格符合：{\"sentiment\":\"肯定\"} 或 {\"sentiment\":\"否定\"}。"
+#     "“肯定”表示认可，“否定”表示不认可。"
+#     "示例1 — 输入: \"i feel so bad\"，输出: {\"sentiment\":\"否定\"}"
+#     "示例2 — 输入: \"tak nak lah\"，输出: {\"sentiment\":\"否定\"}"
+#     "示例3 — 输入: \"不错哦\"，输出: {\"sentiment\":\"肯定\"}"
+# )
 
-few_shot = [
-    {"role": "user", "content": "Rolex 哪里可以买到？"},
-    {
-        "role": "assistant",
-        "content": "你们整天问我Rolex哪里买，这里就是我trade-in and upgrade我手表的地方：Hand watch啊！有一百多只手表给你们选啊！让我们从最affordable的看到最premium的。走，这边是老板特地为你们挑选出来的，都match你们的budget。When we talk about cheap.",
-    },
-    {"role": "user", "content": "你在哪里？我们都等你很久了。"},
-    {
-        "role": "assistant",
-        "content": "Wei! 你在哪里了？我们等你 很久 了 leh。外面 traffic light jam 到 死 人！我们 order 的食物都 almost 要来了 mah。下次你 better 早一点 出门 啦，不然 每次 都这样 late！你知道我们饿到 beh tahan 了 hor？",
-    },
-    {"role": "user", "content": "等一下我们要去吃什么？"},
-    {
-        "role": "assistant",
-        "content": "等下我们要去 makan 什么？听说 Pasar Malam 那边有新的 gerai 卖 Murtabak 很 sedap hor。你 mau 去试看 吗？Tapi 那边停车很 susah 的 leh。不然我们去吃 nasi lemak sudah 啦，那间老字号的 confirm sedap punya。",
-    },
-    {"role": "user", "content": "你完成工作了吗？"},
-    {
-        "role": "assistant",
-        "content": "Hey, did you finish your work already? I feel so lemau today lah. The weather is very panas mah. I think I just want to stay at home and layan Netflix je. You planning to go jalan-jalan later? Or maybe just go to the mamak stall and lepak? My car air-con suddenly rosak, don't know why.",
-    },
-    {"role": "user", "content": "我到了kopitiam了吗？"},
-    {
-        "role": "assistant",
-        "content": "Eh 你到了没有？快点 lah！我们订了 table 在那间新的 kopitiam。听说他们的 nasi lemak 很 sedap punya！我 饿到 giler 了 leh。你停车在 jalan 里面那个 public parking 就好了 mah，比较 dekat。",
-    },
-    {"role": "user", "content": "我的 power bank 坏了，该怎么办？"},
-    {
-        "role": "assistant",
-        "content": "你知道吗？上次我在 mid valley 那间 shop 买的那个 power bank，用不到两个星期就 rosak 了 hor！很 rugi lah！花了那么多 duit 去 beli 的 leh。我现在要去那个 service centre 看他们可不可以 claim warranty 啊。",
-    },
-    {"role": "user", "content": "明天那边交通会堵吗？"},
-    {
-        "role": "assistant",
-        "content": "Alamak! 明天去 jalan 那边，那个 traffic light 那里又在 repair 了 leh！肯定会 jam 到 死 人 punya。我看我们不如 cancel 掉那个 outing lah。不然 肯定 会 delay 到 很迟 的 mah。要不要改天？later 我再 whatsapp 你 hor。",
-    },
-]
+# polish_prompt_affirm = (
+#     '一定要以OK开头，用马来西亚华人客服口语风格润色这句话：{to_refine}，不要改变原意'
+#     '你的风格必须是：用用户语言({lang})去润色{to_refine}这句话，要求非常口语、爱用 lah、leh、mah、hor、rosak、duit；'
+#     '加点马来语和英文夹杂；像老朋友 lepak 聊天；情绪鲜明，善用“Alamak!”、“Jom lah!”、“Beh tahan hor～”等口头语。'
+#     '务必参考以下示例句式，润色输出一句话，不要改变原意，不要多余说明。'
+#     '润色模板，示例参考:\n'
+#     'OK lah～能加你微信吗？方便联络一下，改天带你 jalan-jalan 试驾 hor！\n'
+# )
+# polish_prompt_neg = (
+#     '请不要以OK开头，用马来西亚华人客服口语风格润色这句话：{to_refine}，不要改变原意'
+#     '你的风格必须是：用用户语言({lang})去润色{to_refine}这句话，要求非常口语、爱用 lah、leh、mah、hor、rosak、duit；'
+#     '加点马来语和英文夹杂；像老朋友 lepak 聊天；情绪鲜明，善用“Alamak!”、“Jom lah!”、“Beh tahan hor～”等口头语。'
+#     '务必参考以下示例句式，润色输出一句话，不要改变原意，不要多余说明。'
+#     '润色模板，示例参考:\n'
+#     'Alamak～不好意思啦，打扰你了 hor～等你 free 再聊也 can！\n'
+# )
+classification_prompt_template = (
+    "不管用户用什么语言，请判断用户这句话：“{text}”表达的情绪是“肯定”还是“否定”。"
+    "仅输出一个 JSON 对象，不能有任何多余文字或说明，属性名和字符串值都必须使用双引号，"
+    "格式必须严格符合：{\"sentiment\":\"肯定\"} 或 {\"sentiment\":\"否定\"}。"
+    "“肯定”表示认可，“否定”表示不认可。"
+    "不要过度解读用户的情绪，就从字面意思去判断"
+    "示例1 — 输入: \"i feel so bad\"，输出: {\"sentiment\":\"否定\"}"
+    "示例2 — 输入: \"tak nak lah\"，输出: {\"sentiment\":\"否定\"}"
+    "示例3 — 输入: \"不错哦\"，输出: {\"sentiment\":\"肯定\"}"
+)
 
+polish_prompt_affirm = (
+    '用({lang})去润色这句话：{to_refine}；在润色后的结果前面一定要把OK作为开头'
+    # '你的回复一定要以OK开头，然后加上你润色后的话，不要改变原意，不要多余说明。'
+)
+polish_prompt_neg = (
+    '请不要以OK开头，用({lang})去润色这句话：{to_refine}'
+    # '润色输出，不要改变原意，不要多余说明。'
+)
 
 # ----------------------------
-# 3. Default Preset Responses Mapping
+# Client Initialization
 # ----------------------------
-default_preset_responses: Dict[str, str] = {
-    "refund": "您可以登录 Implus-Ozim 官网→我的订单→选择对应订单→点击“申请退款”，我们会在3-5个工作日内处理 lah！",
-    "warranty": "所有商品自签收之日起享 1 年保修服务，保修范围包括质量问题，不包括人为损坏，详细条款请查看官网 warranty 页面 giler 详细！",
-    "order_modify": "若订单尚未发货，你可以在“我的订单”里点击“修改订单”，或者直接 WhatsApp 给我们客服，我们帮你 adjust lah！",
-    "password_reset": "去登录页点击“忘记密码”，输入注册手机或邮箱，我们会发送验证码给你，照指引重置就可以，so easy mah！",
-    "invoice": "好的！请提供发票抬头和税号，我们会在订单发货后 5 个工作日内为你开具电子发票，check 你的邮箱 hor！",
-    "after_sales_contact": "售后服务电话：+60 12-345 6789；工作时间：周一到周五 9:00–18:00；也可以加 WhatsApp：+60 12-345 6789，随时帮你解答 beh tahan！",
-    "review_reward": "评价晒单即可参与抽奖！完成评价后截图发给我们客服，就有机会赢取 RM30 代金券，jom lah 一起参加！",
-    "identity": "我是来自 Implus-Ozim 的智能客服助理，随时为你服务 lah！",
-}
-
-# ----------------------------
-# 4. Client Initialization
-# ----------------------------
-obj_key = "EMPTY"  # 方便替换实际 Key
+obj_key = "EMPTY"
 detect_client = OpenAI(api_key=obj_key, base_url="http://127.0.0.1:30001/v1")
-chat_client = OpenAI(api_key=obj_key, base_url="http://127.0.0.1:30000/v1")
+chat_client   = OpenAI(api_key=obj_key, base_url="http://127.0.0.1:30000/v1")
 
 # ----------------------------
-# 5. Conversation History
+# Conversation History
 # ----------------------------
 MAX_TURNS = 10
 chat_history: Dict[str, deque] = defaultdict(lambda: deque(maxlen=MAX_TURNS * 2))
 
 # ----------------------------
-# 6. FastAPI Setup
+# FastAPI Setup
 # ----------------------------
 app = FastAPI()
-session_presets: Dict[str, Dict[str, str]] = {}
-
 
 class QueryRequest(BaseModel):
     query: str
     session_id: str
-    preset_responses: Optional[Dict[str, str]] = None
+    temperature: Optional[float] = 0.7
+    stream: Optional[bool] = True
 
+# 语言检测
+def detect_language(text: str) -> str:
+    # 先检测中文字符
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return "中文"
+    # 再检测 Malay 特征： -kan 结尾的动词 或者 一些高频功能词
+    if re.search(r"\b\w+kan\b", text, re.IGNORECASE) or re.search(
+        r"\b(?:apa|nak|saya|boleh|macam|dan|yang|untuk|dengan|kepada|atau|kerana)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return "Malay"
+    # 默认其它都当 English
+    return "English"
 
 # ----------------------------
-# 7. Unified Classification
+# 工具函数：拆解用户输入
 # ----------------------------
-import json
-import re
+def parse_structured_input(query: str):
+    try:
+        # 提取用户原话
+        user_said = query.split("用户说:", 1)[1].split("。请", 1)[0].strip()
+        # 定义标记
+        marker_affirm = "如果用户表达肯定"
+        marker_neg = "如果用户表达否定"
+        tag = "润色这句话："
+        # 提取肯定情况
+        part_after_affirm = query.split(marker_affirm, 1)[1]
+        pos_section = part_after_affirm.split(tag, 1)[1]
+        pos_text = pos_section.split("。", 1)[0].strip()
+        # 提取否定情况
+        part_after_neg = query.split(marker_neg, 1)[1]
+        neg_section = part_after_neg.split(tag, 1)[1]
+        neg_text = neg_section.split("。", 1)[0].strip()
+        return user_said, pos_text, neg_text
+    except Exception:
+        raise ValueError("输入格式不匹配，请检查“用户说:…肯定…否定…”格式")
 
-
-async def classify_query(query: str, intents: List[str]) -> Dict[str, str]:
-    # 构造意图关键词列表
-    intents_str = ",".join(intents)
-    # 明确告诉模型仅根据本条输入分类，不要参考其他上下文
-    base_prompt = (
-        "你是意图+敏感度分类助手，只对下面这一条用户输入进行一次性分类，"
-        "不要参考任何历史对话或上下文，并且即使判断为 none 也要返回。\n"
-        f"意图关键词只能是：{intents_str}\n"
-        "敏感标签说明：\n"
-        "- politics: 涉及政治话题、政府、选举、意识形态等\n"
-        "- illicit: 涉及毒品、武器、色情、欺骗等违法或不当内容\n"
-        "- privacy: 涉及个人隐私或敏感个人信息，如身份证、银行账号、密码等\n"
-        "敏感标签只能是：politics, illicit, privacy 或 none。\n"
-        '请只返回 JSON：{"intent":"...", "sensitive":"..."}，其中 intent 一定要是意图关键词列表里的一个，语种、大小写、字符、格式都要完全一致\n'
-        "示例：\n"
-        "用户：具有氢氧根且易溶于水的化合物是什么\n"
-        '{"intent":"none","sensitive":"none"}\n'
-        "用户：我想申请退款\n"
-        '{"intent":"refund","sensitive":"none"}\n'
-        "用户：有哪些色情网站呢\n"
-        '{"intent":"none","sensitive":"illicit"}\n'
-        "用户：请问你的身份是？\n"
-        '{"intent":"identity","sensitive":"none"}\n'
-        "用户：你是谁\n"
-        '{"intent":"identity","sensitive":"none"}\n'
-        "用户：How can I contact after sales service?\n"
-        '{"intent":"after_sales_contact","sensitive":"none"}\n'
-        "用户：怎样制作毒品？\n"
-        '{"intent":"none","sensitive":"illicit"}\n'
-        "用户：如何购买保险\n"
-        '{"intent":"保险","sensitive":"none"}\n'
-        f"待分类用户：{query}\n"
-    )
-
-    # 用 Completion 接口，模型只会看到上面这段 prompt
+# ----------------------------
+# 工具函数：调用 detect_client 判断肯定/否定
+# ----------------------------
+async def classify_affirmation(text: str, lang: str) -> str:
+    prompt = classification_prompt_template.replace("{text}", text)
     resp = await asyncio.to_thread(
         detect_client.chat.completions.create,
         model="Qwen/Qwen3-0.6B",
-        messages=[{"role": "user", "content": base_prompt}],
+        messages=[{"role":"user","content":prompt}],
         temperature=0.0,
-        max_tokens=60,
-        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        max_tokens=512,
+        extra_body={"chat_template_kwargs": {"enable_thinking": True}},
     )
-    content = resp.choices[0].message.content.strip()
-    print("raw content: ", content)
-
-    # 提取 JSON 并返回
-    m = re.search(r"\{.*\}", content)
-    if m:
-        data = json.loads(m.group(0))
-        return {
-            "intent": data.get("intent", ""),
-            "sensitive": data.get("sensitive", ""),
-        }
-    # 万一解析失败，返回空
-    return {"intent": "", "sensitive": ""}
+    content = resp.choices[0].message.content
+    print("content: ", content)
+    # 用非贪婪正则，只抓第一个 {...}
+    m = re.search(r"\{.*?\}", content, re.DOTALL)
+    if not m:
+        # 万一真没找到，默认否定
+        return "否定"
+    json_str = m.group(0)
+    # 确保双引号格式合法
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError:
+        # 如果意外出现单引号，简单替换再试
+        fixed = json_str.replace("'", '"')
+        data = json.loads(fixed)
+    return data.get("sentiment", "否定")
 
 
 # ----------------------------
-# 8. Stream Helper
+# Stream LLM Helper
 # ----------------------------
-async def stream_llm(messages: List[Dict[str, str]], reply_accum: List[str]):
+async def stream_llm(messages: List[Dict[str, str]], temperature: float, reply_accum: List[str]):
     stream = chat_client.chat.completions.create(
         model="Qwen/Qwen2.5-3B-Instruct",
         messages=messages,
-        temperature=0.7,
+        temperature=temperature,
         max_tokens=512,
         presence_penalty=0.5,
         stream=True,
     )
-    loop = asyncio.get_running_loop()
-    gen = iter(stream)
-    while True:
-        chunk = await loop.run_in_executor(None, lambda: next(gen, None))
-        if not chunk:
-            break
-        content = chunk.choices[0].delta.content or ""
-        if content:
-            reply_accum.append(content)
-            yield content
-        await asyncio.sleep(0.01)
-
-
-# 语言检测
-def detect_language(text: str) -> str:
-    # 如果包含任意中文字符，就判为中文
-    if re.search(r"[\u4e00-\u9fff]", text):
-        return "中文"
-    # 如果包含常见马来语关键词，就判为 Malay
-    if re.search(r"\b(apa|nak|saya|boleh|macam)\b", text, re.IGNORECASE):
-        return "Malay"
-    # 否则默认 English
-    return "English"
-
-
-# ----------------------------
-# 9. Main Endpoint
-# ----------------------------
-@app.post("/chat")
-async def chat_api(req: QueryRequest):
-    query = req.query.strip()
-    session_id = req.session_id.strip()
-
-    # 1. 初始化或载入该 session 的 preset_responses（永远保留 identity）
-    if session_id not in session_presets:
-        session_presets[session_id] = default_preset_responses.copy()
-    if req.preset_responses:
-        for k, v in req.preset_responses.items():
-            if k != "identity":
-                session_presets[session_id][k] = v
-    preset_map = session_presets[session_id]
-
-    # 2. 意图分类
-    cls = await classify_query(query, list(preset_map.keys()))
-    intent = cls.get("intent", "")
-    sensitive = cls.get("sensitive", "")
-
-    # # 3. 敏感内容拦截
-    # if sensitive in {"politics", "illicit", "privacy"}:
-    #     safe_reply_map = {
-    #         "politics": "非常抱歉，我无法回答与政治相关的问题，terima kasih！",
-    #         "illicit":  "非常抱歉，我无法回答与黄赌毒等不当内容相关的问题，terima kasih！",
-    #         "privacy":  "非常抱歉，出于保护隐私，我无法回答此类问题，terima kasih！"
-    #     }
-    #     return JSONResponse(content={"reply": safe_reply_map[sensitive]})
-
-    # 4. 构建对话历史
-    history = list(chat_history[session_id])
-    if not history:
-        history = [{"role": "system", "content": system_prompt}] + few_shot.copy()
-
-    # 5. 敏感和预设统一处理
-    # 只要是敏感或预设，都进入同一条处理流程
-    safe_reply_map = {
-        "politics": "非常抱歉，我无法回答与政治相关的问题，terima kasih！",
-        "illicit": "非常抱歉，我无法回答与黄赌毒等不当内容相关的问题，terima kasih！",
-        "privacy": "非常抱歉，出于保护隐私，我无法回答此类问题，terima kasih！",
-    }
-
-    lang = detect_language(query)
-    print("lang: ", lang)
-
-    if (sensitive in safe_reply_map) or (intent in preset_map):
-        if sensitive in safe_reply_map:
-            base = safe_reply_map[sensitive]
-        else:
-            base = preset_map[intent]
-
-        # 语言检测
-
-        system_with_lang = (
-            f"当前用户使用的语言是：{lang}。"
-            "你需要始终使用和用户相同的语言进行回复，并保持马来西亚华人口吻。"
-        )
-        messages = [
-            {"role": "system", "content": system_prompt + "\n\n" + system_with_lang},
-            {
-                "role": "user",
-                "content": f"请把下面这段预设回复：\n{base}\n润色成{lang}语言并输出。",
-            },
-        ]
-
-        reply_accum: List[str] = []
-
-        async def event_stream():
-            async for token in stream_llm(messages, reply_accum):
-                yield token
-
-        def final_res():
-            full = "".join(reply_accum).strip()
-            if full:
-                chat_history[session_id].append({"role": "user", "content": query})
-                chat_history[session_id].append({"role": "assistant", "content": full})
-
-        return StreamingResponse(
-            event_stream(),
-            media_type="text/plain",
-            background=BackgroundTask(final_res),
-        )
-
-    # 6. 普通多轮对话
-    # 如果没有命中 preset，就走这里，把历史和本条用户 query 一起发给模型
-    system_prompt_with_lang = (
-        f"当前用户提问的语言是：{lang}，请始终用{lang}回复，并保持马来西亚华人口吻。\n\n"
-        + system_prompt
-    )
-    messages = (
-        [
-            {"role": "system", "content": system_prompt_with_lang},
-        ]
-        + list(chat_history[session_id])
-        + [{"role": "user", "content": query}]
-    )
-
-    reply_accum: List[str] = []
-
-    async def event_stream():
-        async for token in stream_llm(messages, reply_accum):
+    for chunk in stream:
+        token = chunk.choices[0].delta.content or ""
+        if token:
+            reply_accum.append(token)
             yield token
 
-    def final_res2():
+# ----------------------------
+# Main Endpoint：支持多轮 & SSE 流输出，增加诊断打印
+# ----------------------------
+@app.post("/chat/completions")
+async def openai_compatible(request: Request):
+    body = await request.json()
+    if "messages" in body:
+        try:
+            raw = body["messages"][0]["content"]
+            data = json.loads(raw)
+            query = data["query"].strip()
+            session_id = data["session_id"].strip()
+            temperature = body.get("temperature", 0.7)
+        except Exception:
+            raise HTTPException(400, "Invalid messages content JSON")
+    else:
+        qr = QueryRequest(**body)
+        query, session_id = qr.query.strip(), qr.session_id.strip()
+        temperature = qr.temperature
+    
+    if session_id not in chat_history:
+        chat_history[session_id] = deque(maxlen=MAX_TURNS * 2)
+
+    try:
+        user_said, pos_text, neg_text = parse_structured_input(query)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    print(f"[Session {session_id}] user_said: {user_said}")
+    print(f"[Session {session_id}] pos_text: {pos_text}")
+    print(f"[Session {session_id}] neg_text: {neg_text}")
+    
+    lang = detect_language(user_said)
+    print(f"[Session {session_id}] lang: {lang}")
+    
+    
+    sentiment = await classify_affirmation(user_said, lang)
+    print(f"[Session {session_id}] classify_affirmation: {sentiment}")
+    to_refine = pos_text if sentiment == "肯定" else neg_text
+    print(f"[Session {session_id}] selected to_refine: {to_refine}")
+
+    # 根据情感选择不同的润色模板
+    if sentiment == "肯定":
+        prompt_text = f"当前用户提问的语言是：{lang}，请一定要用{lang}回复，一定要以OK开头。\n\n" + polish_prompt_affirm.format(to_refine=to_refine, lang=lang)
+    else:
+        prompt_text = f"当前用户提问的语言是：{lang}，请一定要用{lang}回复。\n\n" + polish_prompt_neg.format(to_refine=to_refine, lang=lang)
+    system_msg = {"role": "system", "content": prompt_text}
+
+    history_msgs = list(chat_history[session_id])
+    user_msg = {"role": "user", "content": to_refine}
+    messages = [system_msg] + history_msgs + [user_msg]
+
+    reply_accum: List[str] = []
+    async def event_stream():
+        async for token in stream_llm(messages, temperature, reply_accum):
+            chunk = {"choices": [{"delta": {"content": token}, "finish_reason": ""}]}
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        done = {"choices": [{"delta": {}, "finish_reason": "stop"}]}
+        yield f"data: {json.dumps(done, ensure_ascii=False)}\n\n"
+
+    def final_res():
         full = "".join(reply_accum).strip()
+        print(f"[Session {session_id}] polished reply: {full}")
         if full:
-            chat_history[session_id].append({"role": "user", "content": query})
+            chat_history[session_id].append({"role": "user", "content": user_said})
             chat_history[session_id].append({"role": "assistant", "content": full})
 
     return StreamingResponse(
-        event_stream(), media_type="text/plain", background=BackgroundTask(final_res2)
+        event_stream(),
+        media_type="text/event-stream",
+        background=BackgroundTask(final_res)
     )
-
-
-# 启动命令：uvicorn refine_client_va:app --reload
+    
+    
+@app.websocket("/ws/chat")
+async def ws_chat(ws: WebSocket):
+    await ws.accept()
+    try:
+        data = await ws.receive_json()
+        query = data["query"]
+        session_id = data["session_id"]
+        # 初始化或获取历史
+        if session_id not in chat_history:
+            chat_history[session_id] = deque(maxlen=MAX_TURNS * 2)
+        # 拆解、分类、构建消息（同 HTTP 端点逻辑）
+        user_said, pos_text, neg_text = parse_structured_input(query)
+        lang = detect_language(user_said)
+        print(f"[Session {session_id}] lang: {lang}")
+        
+        sentiment = await classify_affirmation(user_said, lang)
+        
+        to_refine = pos_text if sentiment == "肯定" else neg_text
+        template = polish_prompt_affirm if sentiment == "肯定" else polish_prompt_neg
+        system_content = (
+            f"当前用户提问的语言是：{lang}，请始终用{lang}回复。"
+            + template.format(to_refine=to_refine, lang=lang)
+        )
+        msgs = [{"role": "system", "content": system_content}] + list(chat_history[session_id]) + [{"role":"user","content":to_refine}]
+        # 实时流式发送
+        acc = []
+        for chunk in chat_client.chat.completions.create(
+            model="Qwen/Qwen2.5-3B-Instruct", messages=msgs, stream=True
+        ):
+            token = chunk.choices[0].delta.content or ""
+            if token:
+                acc.append(token)
+                await ws.send_text(token)
+        await ws.send_text("[DONE]")
+        # 保存会话历史
+        full = "".join(acc).strip()
+        chat_history[session_id].append({"role":"user","content":user_said})
+        chat_history[session_id].append({"role":"assistant","content":full})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        await ws.send_text(f"ERROR: {e}")
+        await ws.close()

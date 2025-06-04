@@ -1,33 +1,10 @@
 from huggingface_hub import snapshot_download
 
 custom_dir = "model_local"
-# model_path = snapshot_download(repo_id="Qwen/Qwen2.5-14B-Instruct",
-#                                cache_dir=custom_dir)
-# model_path = snapshot_download(repo_id="Qwen/Qwen2.5-3B-Instruct",
-#                                cache_dir=custom_dir)
+
+model_path = snapshot_download(repo_id="Qwen/Qwen2.5-3B-Instruct", cache_dir=custom_dir)
 model_path = snapshot_download(repo_id="Qwen/Qwen3-14B", cache_dir=custom_dir)
-# snapshot_download(repo_id="Qwen/qwen3-14b")
-# snapshot_download(repo_id="Qwen/Qwen3-4B")
-# snapshot_download(repo_id="Qwen/Qwen2.5-14B-Instruct")
-# snapshot_download(repo_id="Qwen/Qwen2.5-3B-Instruct")
-# snapshot_download(repo_id="Qwen/Qwen3-0.6B")
-# snapshot_download(repo_id="microsoft/Phi-4-mini-instruct")
-# snapshot_download(repo_id="SeaLLMs/SeaLLMs-v3-1.5B-Chat")
-# snapshot_download(repo_id="amd/Instella-3B-SFT")
-# snapshot_download(repo_id="bigscience/mt0-xl")
-# snapshot_download(repo_id="BAAI/bge-m3")
-# snapshot_download(repo_id="jinaai/jina-embeddings-v3",cache_dir=custom_dir)
-# snapshot_download(repo_id="BAAI/bge-large-zh-v1.5")
-# snapshot_download(repo_id="thenlper/gte-large-zh")
-# snapshot_download(repo_id="BAAI/bge-large-en-v1.5")
-# snapshot_download(repo_id="intfloat/e5-large-v2")
-# snapshot_download(repo_id="mesolitica/llama2-embedding-600m-8k")
-# snapshot_download(repo_id="mesolitica/llama2-embedding-2b-8k-contrastive")
-# snapshot_download(repo_id="Qwen/Qwen3-32B")
-# snapshot_download(repo_id="Qwen/QwQ-32B")
-# snapshot_download(repo_id="Qwen/Qwen2.5-32B-Instruct")
-# snapshot_download(repo_id="google/gemma-3-27b-it")
-# snapshot_download(repo_id="mistralai/Pixtral-12B-2409")
-# snapshot_download(repo_id="Qwen/Qwen2.5-VL-7B-Instruct")
-# snapshot_download(repo_id="mistralai/Mistral-Small-3.1-24B-Instruct-2503")
-# snapshot_download(repo_id='google/gemma-3-27b-it-qat-q4_0-unquantized')
+model_path = snapshot_download(
+    repo_id="jinaai/jina-embeddings-v3", cache_dir=custom_dir
+)
+model_path = snapshot_download(repo_id="Qwen/Qwen3-0.6B", cache_dir=custom_dir)
